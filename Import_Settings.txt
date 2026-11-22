@@ -1,0 +1,9 @@
+{
+  "includeDefaultPlanets": false,
+  "includeDefaultHeightmaps": true,
+  "includeDefaultTextures": true,
+  "hideStarsInAtmosphere": true,
+  "authorName": "HYPERE56 Project",
+  "version": "1.0",
+  "description": "HYPERE56 custom solar system"
+}
