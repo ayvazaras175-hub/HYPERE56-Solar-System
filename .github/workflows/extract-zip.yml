@@ -1,3 +1,4 @@
+
 name: Build HYPERE56 SFS System
 
 on:
@@ -27,7 +28,6 @@ jobs:
 
           if [ ! -f "$ZIP_FILE" ]; then
             echo "::error::ZIP file not found: $ZIP_FILE"
-            echo "Repository root contents:"
             ls -la
             exit 1
           fi
@@ -44,7 +44,7 @@ jobs:
 
           SOURCE_DIR=$(dirname "$SETTINGS_FILE")
 
-          for required in "Heightmap Data" "Planet Data" "Texture Data"; do
+          for required in "Heightmap Data" "Planet Data"; do
             if [ ! -d "$SOURCE_DIR/$required" ]; then
               echo "::error::Missing folder: $required"
               exit 1
@@ -57,6 +57,9 @@ jobs:
               exit 1
             fi
           done
+
+          # Texture Data klasörü yoksa otomatik oluştur.
+          mkdir -p "$SOURCE_DIR/Texture Data"
 
           mkdir package
 
@@ -89,7 +92,7 @@ jobs:
           PY
 
           echo "HYPERE56 system validation completed!"
-          find package -maxdepth 2 -type f -print | sort
+          find package -maxdepth 2 -print | sort
 
       - name: Upload ready-to-install SFS system
         uses: actions/upload-artifact@v4
