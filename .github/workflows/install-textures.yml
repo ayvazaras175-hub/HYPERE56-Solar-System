@@ -1,5 +1,5 @@
 
-name: Install and Link HYPERE56 Textures
+name: HYPERE56 Texture Installer
 
 on:
   workflow_dispatch:
@@ -11,85 +11,99 @@ permissions:
   contents: write
 
 jobs:
-  install:
+  install-textures:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Check texture archive
+        run: |
+          set -euo pipefail
+
+          ZIP="HYPERE56-Planet-Textures-v1.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "::error::Texture ZIP not found"
+            exit 1
+          fi
+
+          unzip -t "$ZIP"
 
       - name: Install PNG textures
         run: |
           set -euo pipefail
 
           mkdir -p "Texture Data"
-          unzip -o HYPERE56-Planet-Textures-v1.zip \
+
+          unzip -o "HYPERE56-Planet-Textures-v1.zip" \
             "Texture Data/*.png" -d extracted
 
-          cp extracted/"Texture Data"/*.png "Texture Data/"
+          find extracted -type f -name "*.png" -exec cp {} "Texture Data/" \;
 
-      - name: Update planet texture references
+          echo "Installed textures:"
+          find "Texture Data" -maxdepth 1 -type f -name "*.png" -print
+
+      - name: Validate planet data
         run: |
           python3 <<'PY'
           import json
           from pathlib import Path
 
+          folder = Path("Planet Data")
           planets = [
               "Cindar", "Vesper", "Aurelia", "Nerith",
               "Kryos", "Thalassa", "Orvax", "Elynd",
               "Morrow", "Umbrielis", "Praxos", "Nival"
           ]
 
-          folder = Path("Planet Data")
-
           for name in planets:
               path = folder / f"{name}.txt"
 
-              if not path.exists():
-                  print(f"SKIP: {path} not found")
-                  continue
+              if not path.is_file():
+                  raise SystemExit(f"Missing planet file: {path}")
 
-              data = json.loads(path.read_text(encoding="utf-8"))
+              try:
+                  data = json.loads(path.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  raise SystemExit(f"Invalid JSON: {path}: {exc}")
 
-              terrain = data.get("TERRAIN_DATA", {})
-              texture_data = terrain.get("TERRAIN_TEXTURE_DATA", {})
+              if not isinstance(data, dict):
+                  raise SystemExit(f"Invalid planet structure: {path}")
 
-              if "planetTexture" not in texture_data:
-                  print(f"SKIP: {name} has no planetTexture field")
-                  continue
+              print(f"VALID: {name}")
 
-              texture_data["planetTexture"] = name
-
-              path.write_text(
-                  json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-                  encoding="utf-8"
-              )
-
-              print(f"UPDATED: {name} -> {name}.png")
-
+          print("All planet TXT files passed validation.")
           PY
 
-      - name: Validate texture files
+      - name: Verify texture inventory
         run: |
           set -euo pipefail
 
           for name in Cindar Vesper Aurelia Nerith Kryos Thalassa \
                       Orvax Elynd Morrow Umbrielis Praxos Nival; do
-            test -f "Texture Data/$name.png" || {
-              echo "Missing texture: $name.png"
+            test -s "Texture Data/$name.png" || {
+              echo "::error::Missing texture: $name.png"
               exit 1
             }
           done
 
+          test -s "Texture Data/HYPERE56_Star.png"
+
       - name: Commit changes
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add "Texture Data" "Planet Data"
+          git add "Texture Data"
 
-          if ! git diff --cached --quiet; then
-            git commit -m "Install and link HYPERE56 planet textures"
+          if git diff --cached --quiet; then
+            echo "No new texture files to commit."
+          else
+            git commit -m "Install HYPERE56 custom textures"
             git push
           fi
