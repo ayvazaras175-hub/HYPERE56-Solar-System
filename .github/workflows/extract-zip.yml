@@ -1,44 +1,87 @@
 
-name: Extract SFS System ZIP
+name: Build HYPERE56 SFS System
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - "*.zip"
-      - "**/*.zip"
+      - "HYPERE56-Solar-System-Example-Format.zip"
+      - ".github/workflows/extract-zip.yml"
 
 permissions:
   contents: read
 
 jobs:
-  extract:
+  build-system:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract ZIP
+      - name: Extract and validate HYPERE56 system
+        shell: bash
         run: |
-          set -e
-          ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" -type f | head -n 1)
-          test -n "$ZIP_FILE"
+          set -euo pipefail
+
+          ZIP_FILE="HYPERE56-Solar-System-Example-Format.zip"
+          test -f "$ZIP_FILE"
 
           mkdir extracted
           unzip -q "$ZIP_FILE" -d extracted
 
-          SOURCE=$(find extracted -type d -name "Heightmap Data" -printf '%h\n' | head -n 1)
-          test -n "$SOURCE"
+          SETTINGS_FILE=$(find extracted -type f -name "Import_Settings.txt" -print -quit)
+          test -n "$SETTINGS_FILE"
+
+          SOURCE_DIR=$(dirname "$SETTINGS_FILE")
+
+          for required in "Heightmap Data" "Planet Data" "Texture Data"; do
+            test -d "$SOURCE_DIR/$required" || {
+              echo "::error::Missing folder: $required"
+              exit 1
+            }
+          done
+
+          for required in "Import_Settings.txt" "Space_Center_Data.txt" "Version.txt"; do
+            test -f "$SOURCE_DIR/$required" || {
+              echo "::error::Missing file: $required"
+              exit 1
+            }
+          done
 
           mkdir package
-          cp -R "$SOURCE/Heightmap Data" package/
-          cp -R "$SOURCE/Planet Data" package/
-          cp "$SOURCE/Import_Settings.txt" package/
-          cp "$SOURCE/Space_Center_Data.txt" package/
-          cp "$SOURCE/Version.txt" package/
+          cp -R "$SOURCE_DIR/Heightmap Data" package/
+          cp -R "$SOURCE_DIR/Planet Data" package/
+          cp -R "$SOURCE_DIR/Texture Data" package/
+          cp "$SOURCE_DIR/Import_Settings.txt" package/
+          cp "$SOURCE_DIR/Space_Center_Data.txt" package/
+          cp "$SOURCE_DIR/Version.txt" package/
 
-      - name: Upload extracted system
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          planet_dir = Path("package") / "Planet Data"
+          files = sorted(planet_dir.glob("*.txt"))
+
+          if not files:
+              raise SystemExit("Planet Data is empty.")
+
+          for file in files:
+              with file.open(encoding="utf-8") as stream:
+                  data = json.load(stream)
+              if not isinstance(data, dict):
+                  raise SystemExit(f"Invalid JSON object: {file.name}")
+
+          print(f"Validated {len(files)} planet files.")
+          PY
+
+          find package -maxdepth 2 -type f -print | sort
+
+      - name: Upload ready-to-install SFS system
         uses: actions/upload-artifact@v4
         with:
           name: HYPERE56-SFS-System
           path: package/
+          if-no-files-found: error
+          retention-days: 14
