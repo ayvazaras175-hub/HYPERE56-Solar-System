@@ -1,0 +1,51 @@
+
+name: Install HYPERE56 Textures
+
+on:
+  push:
+    paths:
+      - "HYPERE56-Planet-Textures-v1.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install-textures:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract textures
+        run: |
+          set -euo pipefail
+
+          ZIP="HYPERE56-Planet-Textures-v1.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "Texture ZIP not found!"
+            exit 1
+          fi
+
+          mkdir -p "Texture Data"
+          unzip -o "$ZIP" "Texture Data/*.png" -d extracted
+
+          cp extracted/"Texture Data"/*.png "Texture Data/"
+
+          echo "Installed textures:"
+          ls -lh "Texture Data"
+
+      - name: Commit textures
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "Texture Data"
+          if git diff --cached --quiet; then
+            echo "No texture changes."
+          else
+            git commit -m "Add HYPERE56 custom planet textures"
+            git push
+          fi
