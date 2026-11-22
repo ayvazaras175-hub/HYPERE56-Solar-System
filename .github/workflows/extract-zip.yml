@@ -9,7 +9,7 @@ on:
       - ".github/workflows/extract-zip.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-system:
@@ -19,7 +19,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract and validate HYPERE56 system
+      - name: Extract HYPERE56 system
         shell: bash
         run: |
           set -euo pipefail
@@ -27,8 +27,7 @@ jobs:
           ZIP_FILE="HYPERE56-SFS-System.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "::error::ZIP file not found: $ZIP_FILE"
-            ls -la
+            echo "::error::ZIP file not found!"
             exit 1
           fi
 
@@ -45,59 +44,87 @@ jobs:
           SOURCE_DIR=$(dirname "$SETTINGS_FILE")
 
           for required in "Heightmap Data" "Planet Data"; do
-            if [ ! -d "$SOURCE_DIR/$required" ]; then
+            test -d "$SOURCE_DIR/$required" || {
               echo "::error::Missing folder: $required"
               exit 1
-            fi
+            }
           done
 
           for required in "Import_Settings.txt" "Space_Center_Data.txt" "Version.txt"; do
-            if [ ! -f "$SOURCE_DIR/$required" ]; then
+            test -f "$SOURCE_DIR/$required" || {
               echo "::error::Missing file: $required"
               exit 1
-            fi
+            }
           done
 
-          # Texture Data klasörü yoksa otomatik oluştur.
           mkdir -p "$SOURCE_DIR/Texture Data"
 
-          mkdir package
+          # Eski sistem klasörlerini yenileriyle değiştir.
+          rm -rf "Heightmap Data" "Planet Data" "Texture Data"
 
-          cp -R "$SOURCE_DIR/Heightmap Data" package/
-          cp -R "$SOURCE_DIR/Planet Data" package/
-          cp -R "$SOURCE_DIR/Texture Data" package/
+          cp -R "$SOURCE_DIR/Heightmap Data" .
+          cp -R "$SOURCE_DIR/Planet Data" .
+          cp -R "$SOURCE_DIR/Texture Data" .
 
-          cp "$SOURCE_DIR/Import_Settings.txt" package/
-          cp "$SOURCE_DIR/Space_Center_Data.txt" package/
-          cp "$SOURCE_DIR/Version.txt" package/
+          cp "$SOURCE_DIR/Import_Settings.txt" .
+          cp "$SOURCE_DIR/Space_Center_Data.txt" .
+          cp "$SOURCE_DIR/Version.txt" .
+
+          # Boş klasörün GitHub'da görünmesini sağla.
+          touch "Texture Data/.gitkeep"
+
+      - name: Validate planet files
+        shell: bash
+        run: |
+          set -euo pipefail
 
           python3 - <<'PY'
           import json
           from pathlib import Path
 
-          planet_dir = Path("package") / "Planet Data"
-          files = sorted(planet_dir.glob("*.txt"))
+          files = sorted(Path("Planet Data").glob("*.txt"))
 
           if not files:
-              raise SystemExit("Planet Data is empty.")
+              raise SystemExit("Planet Data is empty!")
 
           for file in files:
               with file.open(encoding="utf-8") as stream:
                   data = json.load(stream)
 
               if not isinstance(data, dict):
-                  raise SystemExit(f"Invalid JSON object: {file.name}")
+                  raise SystemExit(f"Invalid JSON: {file.name}")
 
           print(f"Validated {len(files)} planet files.")
           PY
 
-          echo "HYPERE56 system validation completed!"
-          find package -maxdepth 2 -print | sort
+      - name: Commit system files to GitHub
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Upload ready-to-install SFS system
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "Heightmap Data" "Planet Data" "Texture Data"
+          git add Import_Settings.txt Space_Center_Data.txt Version.txt
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Add HYPERE56 solar system files"
+            git push
+          fi
+
+      - name: Upload ready-to-install system
         uses: actions/upload-artifact@v4
         with:
           name: HYPERE56-SFS-System
-          path: package/
+          path: |
+            Heightmap Data/
+            Planet Data/
+            Texture Data/
+            Import_Settings.txt
+            Space_Center_Data.txt
+            Version.txt
           if-no-files-found: error
           retention-days: 14
