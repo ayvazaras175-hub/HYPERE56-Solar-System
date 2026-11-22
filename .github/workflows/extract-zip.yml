@@ -1,0 +1,44 @@
+
+name: Extract SFS System ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "*.zip"
+      - "**/*.zip"
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract ZIP
+        run: |
+          set -e
+          ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" -type f | head -n 1)
+          test -n "$ZIP_FILE"
+
+          mkdir extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+          SOURCE=$(find extracted -type d -name "Heightmap Data" -printf '%h\n' | head -n 1)
+          test -n "$SOURCE"
+
+          mkdir package
+          cp -R "$SOURCE/Heightmap Data" package/
+          cp -R "$SOURCE/Planet Data" package/
+          cp "$SOURCE/Import_Settings.txt" package/
+          cp "$SOURCE/Space_Center_Data.txt" package/
+          cp "$SOURCE/Version.txt" package/
+
+      - name: Upload extracted system
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPERE56-SFS-System
+          path: package/
